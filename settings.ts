@@ -10,14 +10,30 @@ export const settings = definePluginSettings({
     },
     messageLimit: {
         description: "Maximum number of messages to export (0 = all messages).",
-        type: OptionType.SLIDER,
-        default: 0,
-        markers: [0, 1000, 5000, 10000],
-        stickToMarkers: false
+        type: OptionType.NUMBER,
+        default: 0
     },
     downloadMedia: {
         description: "Download all attachments locally.",
         type: OptionType.BOOLEAN,
         default: false
+    },
+    filterStartDate: {
+        description: "Export starting from (YYYY-MM-DD).",
+        type: OptionType.STRING,
+        default: "",
+        hidden: true
+    },
+    filterEndDate: {
+        description: "Export up to (YYYY-MM-DD).",
+        type: OptionType.STRING,
+        default: "",
+        hidden: true
+    },
+    filterUserId: {
+        description: "Only export messages from this User ID.",
+        type: OptionType.STRING,
+        default: "",
+        hidden: true
     }
 });

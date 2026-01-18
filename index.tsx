@@ -1,5 +1,6 @@
-import { React, Forms, Text, Button, Switch, Alerts, RestAPI, Constants, ChannelStore, SelectedChannelStore, UserStore, SnowflakeUtils, showToast, Toasts } from "@webpack/common";
+import { React, Forms, Text, Button, TextInput, Select, Slider, Alerts, RestAPI, Constants, ChannelStore, SelectedChannelStore, UserStore, SnowflakeUtils, showToast, Toasts } from "@webpack/common";
 import { Divider } from "@components/Divider";
+import { FormSwitch } from "@components/FormSwitch";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { Logger } from "@utils/Logger";
 import { settings } from "./settings";
@@ -32,19 +33,55 @@ async function fetchAllMessages(channelId: string, progressCallback?: (count: nu
   let before: string | undefined = undefined;
   let totalFetched = 0;
   const limit = settings.store.messageLimit;
+  const { filterStartDate, filterEndDate, filterUserId } = settings.store;
 
   const currentUser = UserStore.getCurrentUser();
+
+  // Convert dates to snowflakes if provided
+  let afterSnowflake: string | undefined = undefined;
+  let beforeSnowflake: string | undefined = undefined;
+
+  if (filterStartDate && SnowflakeUtils) {
+    try {
+      const startTimestamp = new Date(filterStartDate).getTime();
+      if (!isNaN(startTimestamp)) afterSnowflake = SnowflakeUtils.fromTimestamp(startTimestamp);
+    } catch (err) {
+      logger.error("Failed to convert start date to snowflake:", err);
+    }
+  }
+
+  if (filterEndDate && SnowflakeUtils) {
+    try {
+      const endTimestamp = new Date(filterEndDate).getTime();
+      if (!isNaN(endTimestamp)) beforeSnowflake = SnowflakeUtils.fromTimestamp(endTimestamp);
+    } catch (err) {
+      logger.error("Failed to convert end date to snowflake:", err);
+    }
+  }
 
   try {
     while (true) {
       if (limit > 0 && totalFetched >= limit) break;
 
+      const query: any = {
+        limit: Math.floor(Math.min(100, limit > 0 ? limit - totalFetched : 100))
+      };
+
+      if (before) {
+        query.before = before;
+      } else if (beforeSnowflake) {
+        query.before = beforeSnowflake;
+      }
+
+      if (afterSnowflake) {
+        query.after = afterSnowflake;
+      }
+
+      logger.debug("Fetching messages with query:", query);
+
       const res = await RestAPI.get({
         url: Constants.Endpoints.MESSAGES(channelId),
-        query: {
-          limit: Math.min(100, limit > 0 ? limit - totalFetched : 100),
-          before
-        }
+        query
       });
 
       if (!res.ok) {
@@ -54,42 +91,48 @@ async function fetchAllMessages(channelId: string, progressCallback?: (count: nu
       const batch = res.body;
       if (!batch || batch.length === 0) break;
 
-      const messages: Message[] = batch.map((m: any) => ({
-        id: m.id,
-        content: m.content || "",
-        author: {
-          id: m.author?.id || "unknown",
-          username: m.author?.username || "Unknown",
-          globalName: m.author?.global_name,
-          discriminator: m.author?.discriminator || "0000",
-          avatar: m.author?.avatar || null
-        },
-        timestamp: m.timestamp,
-        editedTimestamp: m.edited_timestamp,
-        attachments: m.attachments?.map((a: any) => ({
-          id: a.id,
-          filename: a.filename,
-          url: a.url,
-          size: a.size,
-          contentType: a.content_type
-        })) || [],
-        embeds: m.embeds || [],
-        reactions: m.reactions?.map((r: any) => ({
-          emoji: r.emoji,
-          count: r.count
-        })) || [],
-        mentions: m.mentions || [],
-        pinned: !!m.pinned,
-        type: m.type || 0
-      }));
+      const messages: Message[] = batch
+        .map((m: any) => ({
+          id: m.id,
+          content: m.content || "",
+          author: {
+            id: m.author?.id || "unknown",
+            username: m.author?.username || "Unknown",
+            globalName: m.author?.global_name,
+            discriminator: m.author?.discriminator || "0000",
+            avatar: m.author?.avatar || null
+          },
+          timestamp: m.timestamp,
+          editedTimestamp: m.edited_timestamp,
+          attachments: m.attachments?.map((a: any) => ({
+            id: a.id,
+            filename: a.filename,
+            url: a.url,
+            size: a.size,
+            contentType: a.content_type
+          })) || [],
+          embeds: m.embeds || [],
+          reactions: m.reactions?.map((r: any) => ({
+            emoji: r.emoji,
+            count: r.count
+          })) || [],
+          mentions: m.mentions || [],
+          pinned: !!m.pinned,
+          type: m.type || 0
+        }))
+        // Filter by User ID if set
+        .filter((m: Message) => !filterUserId || m.author.id === filterUserId);
 
       allMessages = [...allMessages, ...messages];
       totalFetched += messages.length;
 
       progressCallback?.(totalFetched);
 
-      if (messages.length < 100) break;
-      before = messages[messages.length - 1].id;
+      if (batch.length < 100) break;
+      before = batch[batch.length - 1].id;
+
+      // If we've reached or gone past the 'after' snowflake, we can stop
+      if (afterSnowflake && before && BigInt(before) <= BigInt(afterSnowflake)) break;
 
       const delay = (currentUser?.premiumType ?? 0) > 0 ? 200 : 600;
       await new Promise(r => setTimeout(r, delay));
@@ -122,11 +165,15 @@ async function handleDownload(name: string, content: string, type: string, messa
   const exportPath = settings.store.exportPath;
   const shouldDownloadMedia = settings.store.downloadMedia;
 
-  if (exportPath && !IS_WEB) {
-    // Save the manifest file (JSON/CSV/HTML)
-    const res = await Native.saveFile(exportPath, name, content);
+  if (exportPath && typeof exportPath === "string" && !IS_WEB) {
+    // Phase 3: Create a unique subfolder for this export
+    const folderName = name.replace(/\.(json|csv|html)$/, "");
+    const subfolderPath = exportPath + "/" + folderName;
+
+    // Save the manifest file (JSON/CSV/HTML) inside the subfolder
+    const res = await Native.saveFile(subfolderPath, name, content);
     if (res.ok) {
-      showToast(`Saved ${name} to ${exportPath}`, Toasts.Type.SUCCESS);
+      showToast(`Saved ${name} to ${subfolderPath}`, Toasts.Type.SUCCESS);
 
       // Handle Media Downloading
       if (shouldDownloadMedia && messages) {
@@ -142,7 +189,7 @@ async function handleDownload(name: string, content: string, type: string, messa
               if (fileRes.ok) {
                 const buffer = await fileRes.arrayBuffer();
                 const fileName = `${a.messageId}_${a.filename}`;
-                await Native.saveFile(`${exportPath}/${mediaFolder}`, fileName, new Uint8Array(buffer));
+                await Native.saveFile(`${subfolderPath}/${mediaFolder}`, fileName, new Uint8Array(buffer));
               }
             } catch (err) {
               logger.error(`Failed to download attachment ${a.filename}:`, err);
@@ -369,8 +416,14 @@ export default definePlugin({
             const html = exportToHTML(channel, messages);
             await handleDownload(`${formatFileName(channel)}.html`, html, "text/html", messages);
             Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
-          } catch (error) {
-            Alerts.show({ title: "Error", body: "Export failed." });
+          } catch (error: any) {
+            logger.error("Export failed:", error);
+            const errorMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+            Alerts.show({
+              title: "Export Failed",
+              body: "Export failed: " + errorMsg,
+              confirmText: "Close"
+            });
           }
         }
       });
@@ -380,7 +433,10 @@ export default definePlugin({
   settingsAboutComponent: () => {
     const [exporting, setExporting] = React.useState(false);
     const [progress, setProgress] = React.useState(0);
-    const { exportPath, messageLimit, downloadMedia } = settings.use(["exportPath", "messageLimit", "downloadMedia"]);
+    const [format, setFormat] = React.useState<'json' | 'csv' | 'html'>('json');
+    const { exportPath, messageLimit, downloadMedia, filterStartDate, filterEndDate, filterUserId } = settings.use([
+      "exportPath", "messageLimit", "downloadMedia", "filterStartDate", "filterEndDate", "filterUserId"
+    ]);
 
     const channelId = SelectedChannelStore.getChannelId();
     const channel = ChannelStore.getChannel(channelId);
@@ -413,8 +469,10 @@ export default definePlugin({
         }
 
         Alerts.show({ title: "Success", body: `Exported ${messages.length} messages successfully!` });
-      } catch (error) {
-        Alerts.show({ title: "Error", body: "Export failed: " + error });
+      } catch (error: any) {
+        logger.error("Export failed:", error);
+        const errorMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+        Alerts.show({ title: "Error", body: "Export failed: " + errorMsg });
       } finally {
         setExporting(false);
       }
@@ -429,8 +487,8 @@ export default definePlugin({
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
         <div>
-          <Forms.FormTitle>Chat Exporter</Forms.FormTitle>
           <Forms.FormText>
             Export complete chat history from the currently selected channel: <strong>#{channel?.name || "No channel selected"}</strong>
           </Forms.FormText>
@@ -452,13 +510,6 @@ export default definePlugin({
           </div>
         </div>
 
-        <Switch
-          title="Download Media"
-          note="Downloads all images and files locally into an 'attachments' folder."
-          value={downloadMedia}
-          onChange={v => settings.store.downloadMedia = v}
-        />
-
         {exporting ? (
           <div style={{ margin: "12px 0" }}>
             <Text>Fetching messages... {progress} {messageLimit > 0 ? `/ ${messageLimit}` : ""} fetched</Text>
@@ -478,39 +529,95 @@ export default definePlugin({
             </div>
           </div>
         ) : (
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <Forms.FormTitle tag="h5">Select Format</Forms.FormTitle>
+              <Select
+                options={[
+                  { label: "JSON (Complete Metadata)", value: "json" },
+                  { label: "CSV (Excel/Sheets)", value: "csv" },
+                  { label: "HTML (Discord-like view)", value: "html" }
+                ]}
+                isSelected={v => v === format}
+                select={v => setFormat(v as any)}
+                serialize={v => v}
+              />
+            </div>
             <Button
-              onClick={() => handleExport('json')}
+              onClick={() => handleExport(format)}
               color={Button.Colors.BRAND}
               disabled={!channel}
+              style={{ padding: "10px 24px" }}
             >
-              Export as JSON
-            </Button>
-            <Button
-              onClick={() => handleExport('csv')}
-              color={Button.Colors.BRAND}
-              disabled={!channel}
-            >
-              Export as CSV
-            </Button>
-            <Button
-              onClick={() => handleExport('html')}
-              color={Button.Colors.BRAND}
-              disabled={!channel}
-            >
-              Export as HTML
+              Export
             </Button>
           </div>
         )}
 
         <Divider />
 
-        <Forms.FormText style={{ fontSize: "12px", opacity: 0.7 }}>
-          • Fetches messages in batches of 100<br />
-          • Respects your set message limit ({messageLimit === 0 ? "All" : messageLimit})<br />
-          • Works with any channel type<br />
-          • Preserves attachments and embeds (as metadata)
-        </Forms.FormText>
+        <div>
+          <Forms.FormTitle tag="h5">Quick Date Presets</Forms.FormTitle>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+            {[
+              { label: "Today", days: 0 },
+              { label: "7 Days", days: 7 },
+              { label: "30 Days", days: 30 },
+              { label: "All Time", days: -1 }
+            ].map(p => (
+              <Button
+                key={p.label}
+                size={Button.Sizes.SMALL}
+                color={Button.Colors.PRIMARY}
+                onClick={() => {
+                  if (p.days === -1) {
+                    settings.store.filterStartDate = "";
+                    settings.store.filterEndDate = "";
+                  } else {
+                    const end = new Date();
+                    const start = new Date();
+                    start.setDate(end.getDate() - p.days);
+                    settings.store.filterStartDate = start.toISOString().split('T')[0];
+                    settings.store.filterEndDate = end.toISOString().split('T')[0];
+                  }
+                }}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div>
+              <Forms.FormTitle tag="h5">Start Date</Forms.FormTitle>
+              <TextInput
+                type="date"
+                value={filterStartDate}
+                onChange={v => settings.store.filterStartDate = v}
+              />
+            </div>
+            <div>
+              <Forms.FormTitle tag="h5">End Date</Forms.FormTitle>
+              <TextInput
+                type="date"
+                value={filterEndDate}
+                onChange={v => settings.store.filterEndDate = v}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <Forms.FormTitle tag="h5">Only from User (ID)</Forms.FormTitle>
+          <TextInput
+            placeholder="Discord User ID"
+            value={filterUserId}
+            onChange={v => settings.store.filterUserId = v}
+          />
+        </div>
+
+        <Divider />
+
       </div>
     );
   }

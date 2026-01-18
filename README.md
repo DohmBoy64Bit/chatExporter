@@ -10,12 +10,15 @@ A powerful and user-friendly Vencord plugin that allows you to export chat histo
 - **Multiple Formats**: Export chat history to **JSON** (full metadata), **CSV**, or **HTML** (Discord-like view).
 - **Discord-like HTML**: Standalone HTML files that look exactly like the Discord app, complete with dark mode and avatars.
 - **Media Downloader**: Option to download all attachments (images, videos, files) locally into an `attachments/` folder.
+- **Automatic Organization**: Each export automatically creates its own dated subfolder (e.g., `General_2024-01-18`) to keep files and media neatly separated.
+- **Advanced Filtering**: Filter exports by **Date Range** (Native calendar pickers & quick presets) or a specific **User ID**.
 - **Customizable Scope**: Export any channel, group DM, or private message by right-clicking.
-- **Message Limits**: Choose to export everything or set a specific limit (e.g., last 1000 messages) via a slider.
+- **Message Limits**: Choose to export everything or set a specific limit (e.g., last 1000 messages) via a dedicated input box.
 - **Native File Saving**: Select a custom folder on your computer to save exports directly, bypassing the browser's download prompt.
 - **Real-time Feedback**: Includes a progress bar in settings and **Toast notifications** for long-running exports in the background.
 - **Rate-Limit Respectful**: Fetches messages in batches with built-in delays to avoid Discord API rate limits.
 - **Detailed Metadata**: Exports include author info, timestamps, message content, attachments, embeds, and reactions.
+- **Universal Media Downloader**: Automatically saves images, videos, audio, and documents (PDF, ZIP, etc.) from message attachments.
 
 ## 📥 Installation
 
@@ -35,7 +38,7 @@ A powerful and user-friendly Vencord plugin that allows you to export chat histo
 ### Quick Export (Toolbox)
 1.  **Right-click** on any channel or DM in your sidebar.
 2.  Look for the **Toolbox** section.
-3.  Select **Export Chat (JSON)** or **Export Chat (CSV)**.
+3.  Select **Export Chat (JSON)**, **(CSV)**, or **(HTML)**.
 4.  Confirm the export in the dialog that appears.
 5.  Follow the progress via the **Toast notifications** in the bottom-right.
 
@@ -43,13 +46,16 @@ A powerful and user-friendly Vencord plugin that allows you to export chat histo
 1.  Go to **Discord Settings** > **Vencord** > **Plugins**.
 2.  Search for **Chat Exporter** and click the settings icon (cog).
 3.  **Select Folder**: Choose where you want your files saved.
-4.  **Message Limit**: Use the slider to set how many messages you want to fetch (Set to 0 for All).
-5.  Use the **Export as JSON/CSV** buttons to start the export for the currently selected channel.
+4.  **Message Limit**: Enter how many messages you want to fetch in the input box (Set to 0 for "All messages").
+5.  **Filtering**: Use the **Quick Date Presets** ([Today], [7 Days], etc.) or the **Native Calendar Pickers** to select a time frame.
+6.  **Exporting**: Choose your format (JSON, CSV, or HTML) from the dropdown and click the **Export** button.
 
 ## ⚙️ Configuration
 
-- **Export Path**: The directory where your chat exports will be stored automatically.
+- **Export Path**: The directory where your chat exports will be stored. Each export gets its own unique subfolder.
 - **Message Limit**: Controls the depth of the export. Useful for quickly grabbing recent history without fetching years of data.
+- **Download Media**: If enabled, all images, videos, and files in the chat will be saved to your computer.
+- **Date/User Filters**: Allows you to export specific time periods or messages from a single user.
 
 ## 📝 License
 
