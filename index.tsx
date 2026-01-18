@@ -311,6 +311,16 @@ export default definePlugin({
   authors: [{ name: "You", id: 123456789n }],
   version: "1.3.0",
   settings,
+  css: `
+    @keyframes exporter-pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+    .exporter-pulsing {
+      animation: exporter-pulse 1.5s infinite ease-in-out;
+    }
+  `,
 
   start() {
     logger.info("Chat Exporter plugin started");
@@ -519,13 +529,16 @@ export default definePlugin({
               borderRadius: "2px",
               marginTop: "8px"
             }}>
-              <div style={{
-                width: `${messageLimit > 0 ? Math.min((progress / messageLimit) * 100, 100) : 100}%`,
-                height: "100%",
-                background: "var(--green-360)",
-                borderRadius: "2px",
-                transition: "width 0.3s"
-              }} />
+              <div
+                className={messageLimit === 0 ? "exporter-pulsing" : ""}
+                style={{
+                  width: `${messageLimit > 0 ? Math.min((progress / messageLimit) * 100, 100) : 100}%`,
+                  height: "100%",
+                  background: "var(--green-360)",
+                  borderRadius: "2px",
+                  transition: "width 0.3s"
+                }}
+              />
             </div>
           </div>
         ) : (
