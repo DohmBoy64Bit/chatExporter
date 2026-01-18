@@ -16,11 +16,11 @@ export async function selectFolder() {
     return result.filePaths[0];
 }
 
-export async function saveFile(_: any, folderPath: string, fileName: string, content: string) {
+export async function saveFile(_: any, folderPath: string, fileName: string, content: string | Uint8Array) {
     try {
         await mkdir(folderPath, { recursive: true });
         const filePath = join(folderPath, fileName);
-        await writeFile(filePath, content, "utf-8");
+        await writeFile(filePath, content);
         return { ok: true };
     } catch (error) {
         return { ok: false, error: String(error) };

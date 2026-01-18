@@ -14,5 +14,10 @@ export const settings = definePluginSettings({
         default: 0,
         markers: [0, 1000, 5000, 10000],
         stickToMarkers: false
+    },
+    downloadMedia: {
+        description: "Download all attachments locally.",
+        type: OptionType.BOOLEAN,
+        default: false
     }
 });

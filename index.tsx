@@ -1,4 +1,4 @@
-import { React, Forms, Text, Button, Alerts, RestAPI, Constants, ChannelStore, SelectedChannelStore, UserStore, SnowflakeUtils, showToast, Toasts } from "@webpack/common";
+import { React, Forms, Text, Button, Switch, Alerts, RestAPI, Constants, ChannelStore, SelectedChannelStore, UserStore, SnowflakeUtils, showToast, Toasts } from "@webpack/common";
 import { Divider } from "@components/Divider";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { Logger } from "@utils/Logger";
@@ -118,15 +118,42 @@ function formatFileName(channel: any): string {
   return `discord-channel-${channel.id}-${dateStr}`;
 }
 
-async function handleDownload(name: string, content: string, type: string) {
+async function handleDownload(name: string, content: string, type: string, messages?: Message[]) {
   const exportPath = settings.store.exportPath;
+  const shouldDownloadMedia = settings.store.downloadMedia;
+
   if (exportPath && !IS_WEB) {
+    // Save the manifest file (JSON/CSV/HTML)
     const res = await Native.saveFile(exportPath, name, content);
     if (res.ok) {
-      showToast(`Saved to ${exportPath}\\${name}`, Toasts.Type.SUCCESS);
+      showToast(`Saved ${name} to ${exportPath}`, Toasts.Type.SUCCESS);
+
+      // Handle Media Downloading
+      if (shouldDownloadMedia && messages) {
+        const attachments = messages.flatMap(m => m.attachments.map(a => ({ ...a, messageId: m.id })));
+        if (attachments.length > 0) {
+          showToast(`Downloading ${attachments.length} attachments...`, Toasts.Type.MESSAGE);
+          const mediaFolder = "attachments";
+
+          for (let i = 0; i < attachments.length; i++) {
+            const a = attachments[i];
+            try {
+              const fileRes = await fetch(a.url);
+              if (fileRes.ok) {
+                const buffer = await fileRes.arrayBuffer();
+                const fileName = `${a.messageId}_${a.filename}`;
+                await Native.saveFile(`${exportPath}/${mediaFolder}`, fileName, new Uint8Array(buffer));
+              }
+            } catch (err) {
+              logger.error(`Failed to download attachment ${a.filename}:`, err);
+            }
+            if ((i + 1) % 10 === 0) showToast(`Downloaded ${i + 1}/${attachments.length} items...`, Toasts.Type.MESSAGE);
+          }
+          showToast("Media download complete!", Toasts.Type.SUCCESS);
+        }
+      }
     } else {
       showToast(`Failed to save: ${res.error}`, Toasts.Type.FAILURE);
-      // Fallback to browser download
       downloadFile(name, content, type);
     }
   } else {
@@ -280,7 +307,7 @@ export default definePlugin({
               },
               messages
             };
-            await handleDownload(`${formatFileName(channel)}.json`, JSON.stringify(data, null, 2), "application/json");
+            await handleDownload(`${formatFileName(channel)}.json`, JSON.stringify(data, null, 2), "application/json", messages);
             Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
           } catch (error) {
             Alerts.show({ title: "Error", body: "Export failed. Check console for details." });
@@ -310,7 +337,7 @@ export default definePlugin({
               if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
             });
             const csv = exportToCSV(messages);
-            await handleDownload(`${formatFileName(channel)}.csv`, csv, "text/csv");
+            await handleDownload(`${formatFileName(channel)}.csv`, csv, "text/csv", messages);
             Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
           } catch (error) {
             Alerts.show({ title: "Error", body: "Export failed." });
@@ -340,7 +367,7 @@ export default definePlugin({
               if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
             });
             const html = exportToHTML(channel, messages);
-            await handleDownload(`${formatFileName(channel)}.html`, html, "text/html");
+            await handleDownload(`${formatFileName(channel)}.html`, html, "text/html", messages);
             Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
           } catch (error) {
             Alerts.show({ title: "Error", body: "Export failed." });
@@ -353,7 +380,7 @@ export default definePlugin({
   settingsAboutComponent: () => {
     const [exporting, setExporting] = React.useState(false);
     const [progress, setProgress] = React.useState(0);
-    const { exportPath, messageLimit } = settings.use(["exportPath", "messageLimit"]);
+    const { exportPath, messageLimit, downloadMedia } = settings.use(["exportPath", "messageLimit", "downloadMedia"]);
 
     const channelId = SelectedChannelStore.getChannelId();
     const channel = ChannelStore.getChannel(channelId);
@@ -376,13 +403,13 @@ export default definePlugin({
             exportedAt: new Date().toISOString(),
             messages
           };
-          await handleDownload(`${formatFileName(channel)}.json`, JSON.stringify(data, null, 2), "application/json");
+          await handleDownload(`${formatFileName(channel)}.json`, JSON.stringify(data, null, 2), "application/json", messages);
         } else if (format === 'csv') {
           const csv = exportToCSV(messages);
-          await handleDownload(`${formatFileName(channel)}.csv`, csv, "text/csv");
+          await handleDownload(`${formatFileName(channel)}.csv`, csv, "text/csv", messages);
         } else {
           const html = exportToHTML(channel, messages);
-          await handleDownload(`${formatFileName(channel)}.html`, html, "text/html");
+          await handleDownload(`${formatFileName(channel)}.html`, html, "text/html", messages);
         }
 
         Alerts.show({ title: "Success", body: `Exported ${messages.length} messages successfully!` });
@@ -424,6 +451,13 @@ export default definePlugin({
             </Button>
           </div>
         </div>
+
+        <Switch
+          title="Download Media"
+          note="Downloads all images and files locally into an 'attachments' folder."
+          value={downloadMedia}
+          onChange={v => settings.store.downloadMedia = v}
+        />
 
         {exporting ? (
           <div style={{ margin: "12px 0" }}>
