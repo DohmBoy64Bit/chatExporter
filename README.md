@@ -36,6 +36,9 @@ A powerful and user-friendly Vencord plugin that allows you to export chat histo
 ## 🛠️ Usage
 
 ### Quick Export (Toolbox)
+> [!IMPORTANT]
+> To use Quick Export, you must have the built-in **Toolbox** plugin enabled in Vencord (Settings > Vencord > Plugins > Toolbox).
+
 1.  **Right-click** on any channel or DM in your sidebar.
 2.  Look for the **Toolbox** section.
 3.  Select **Export Chat (JSON)**, **(CSV)**, or **(HTML)**.
@@ -49,6 +52,13 @@ A powerful and user-friendly Vencord plugin that allows you to export chat histo
 4.  **Message Limit**: Enter how many messages you want to fetch in the input box (Set to 0 for "All messages").
 5.  **Filtering**: Use the **Quick Date Presets** ([Today], [7 Days], etc.) or the **Native Calendar Pickers** to select a time frame.
 6.  **Exporting**: Choose your format (JSON, CSV, or HTML) from the dropdown and click the **Export** button.
+
+### 🆔 How to get a Discord User ID
+To use the **User ID** filter, you need the unique numerical ID of the user:
+1.  Go to **Discord Settings** > **Advanced**.
+2.  Enable **Developer Mode**.
+3.  **Right-click** any user's name or avatar anywhere in Discord.
+4.  Select **Copy User ID** at the bottom of the menu.
 
 ## ⚙️ Configuration
 
