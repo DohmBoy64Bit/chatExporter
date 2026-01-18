@@ -160,6 +160,77 @@ function exportToCSV(messages: Message[]) {
   return [headers, ...rows].map(row => row.join(",")).join("\n");
 }
 
+function exportToHTML(channel: any, messages: Message[]) {
+  const channelName = channel.name || "Direct Message";
+  const date = new Date().toLocaleString();
+
+  const messageHTML = messages.map(msg => {
+    const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const fullDate = new Date(msg.timestamp).toLocaleDateString();
+    const avatarUrl = msg.author.avatar
+      ? `https://cdn.discordapp.com/avatars/${msg.author.id}/${msg.author.avatar}.webp`
+      : `https://cdn.discordapp.com/embed/avatars/${parseInt(msg.author.id) % 5}.png`;
+
+    return `
+      <div class="message">
+        <img class="avatar" src="${avatarUrl}" alt="Avatar">
+        <div class="msg-content">
+          <div class="msg-header">
+            <span class="author">${msg.author.globalName || msg.author.username}</span>
+            <span class="timestamp" title="${fullDate}">${time}</span>
+          </div>
+          <div class="text">${msg.content || ""}</div>
+          ${msg.attachments.map(a => `
+            <div class="attachment">
+              ${a.contentType?.startsWith('image/')
+        ? `<img src="${a.url}" style="max-width: 400px; max-height: 400px; border-radius: 8px; margin-top: 8px;">`
+        : `<a href="${a.url}" target="_blank">File: ${a.filename}</a>`}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Export - #${channelName}</title>
+      <style>
+        body { background: #313338; color: #dbdee1; font-family: 'gg sans', 'Noto Sans', sans-serif; margin: 0; padding: 20px; line-height: 1.375; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .channel-header { border-bottom: 1px solid #3f4147; padding-bottom: 10px; margin-bottom: 20px; }
+        .channel-name { font-size: 24px; font-weight: 600; color: #fff; }
+        .export-info { font-size: 12px; color: #949ba4; }
+        .message { display: flex; padding: 2px 0; margin: 15px 0; }
+        .message:hover { background: #2e3035; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 16px; margin-top: 3px; }
+        .msg-content { flex: 1; }
+        .msg-header { margin-bottom: 2px; }
+        .author { font-weight: 500; color: #fff; margin-right: 8px; cursor: pointer; }
+        .author:hover { text-decoration: underline; }
+        .timestamp { font-size: 12px; color: #949ba4; cursor: default; }
+        .text { white-space: pre-wrap; word-wrap: break-word; font-size: 16px; }
+        .attachment { margin-top: 5px; }
+        .attachment a { color: #00a8fc; text-decoration: none; }
+        .attachment a:hover { text-decoration: underline; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="channel-header">
+          <div class="channel-name">#${channelName}</div>
+          <div class="export-info">Exported on ${date} • ${messages.length} messages</div>
+        </div>
+        ${messageHTML}
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 export default definePlugin({
   name: "Chat Exporter",
   description: "Export entire channel/group chat to JSON, CSV, or HTML",
@@ -246,6 +317,36 @@ export default definePlugin({
           }
         }
       });
+    },
+
+    "Export Chat (HTML)": () => {
+      const channelId = SelectedChannelStore.getChannelId();
+      const channel = ChannelStore.getChannel(channelId);
+
+      if (!channel) {
+        Alerts.show({ title: "Error", body: "No channel selected" });
+        return;
+      }
+
+      Alerts.show({
+        title: "Confirm Export",
+        body: `Export messages from #${channel.name || "DM"} as HTML?\nThis will create a viewable file that looks like Discord.`,
+        confirmText: "Export",
+        cancelText: "Cancel",
+        onConfirm: async () => {
+          try {
+            showToast("Starting export...", Toasts.Type.MESSAGE);
+            const messages = await fetchAllMessages(channelId, (count) => {
+              if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
+            });
+            const html = exportToHTML(channel, messages);
+            await handleDownload(`${formatFileName(channel)}.html`, html, "text/html");
+            Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
+          } catch (error) {
+            Alerts.show({ title: "Error", body: "Export failed." });
+          }
+        }
+      });
     }
   },
 
@@ -257,7 +358,7 @@ export default definePlugin({
     const channelId = SelectedChannelStore.getChannelId();
     const channel = ChannelStore.getChannel(channelId);
 
-    const handleExport = async (format: 'json' | 'csv') => {
+    const handleExport = async (format: 'json' | 'csv' | 'html') => {
       if (!channel) {
         Alerts.show({ title: "Error", body: "No channel selected" });
         return;
@@ -276,9 +377,12 @@ export default definePlugin({
             messages
           };
           await handleDownload(`${formatFileName(channel)}.json`, JSON.stringify(data, null, 2), "application/json");
-        } else {
+        } else if (format === 'csv') {
           const csv = exportToCSV(messages);
           await handleDownload(`${formatFileName(channel)}.csv`, csv, "text/csv");
+        } else {
+          const html = exportToHTML(channel, messages);
+          await handleDownload(`${formatFileName(channel)}.html`, html, "text/html");
         }
 
         Alerts.show({ title: "Success", body: `Exported ${messages.length} messages successfully!` });
@@ -354,6 +458,13 @@ export default definePlugin({
               disabled={!channel}
             >
               Export as CSV
+            </Button>
+            <Button
+              onClick={() => handleExport('html')}
+              color={Button.Colors.BRAND}
+              disabled={!channel}
+            >
+              Export as HTML
             </Button>
           </div>
         )}
