@@ -7,7 +7,8 @@ A powerful and user-friendly Vencord plugin that allows you to export chat histo
 
 ## 🚀 Features
 
-- **Multiple Formats**: Export chat history to **JSON** (full metadata) or **CSV** (easy to read in Excel/Sheets).
+- **Multiple Formats**: Export chat history to **JSON** (full metadata), **CSV**, or **HTML** (Discord-like view).
+- **Discord-like HTML**: Standalone HTML files that look exactly like the Discord app, complete with dark mode and avatars.
 - **Customizable Scope**: Export any channel, group DM, or private message by right-clicking.
 - **Message Limits**: Choose to export everything or set a specific limit (e.g., last 1000 messages) via a slider.
 - **Native File Saving**: Select a custom folder on your computer to save exports directly, bypassing the browser's download prompt.
