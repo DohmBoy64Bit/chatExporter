@@ -37,7 +37,7 @@ A powerful and user-friendly Vencord plugin that allows you to export chat histo
 
 ### Quick Export (Toolbox)
 > [!IMPORTANT]
-> To use Quick Export, you must have the built-in **Toolbox** plugin enabled in Vencord (Settings > Vencord > Plugins > Toolbox).
+> To use Quick Export, you must have the built-in **Toolbox** plugin enabled in Vencord (Settings > Vencord > Plugins > VencordToolbox).
 
 1.  **Right-click** on any channel or DM in your sidebar.
 2.  Look for the **Toolbox** section.
