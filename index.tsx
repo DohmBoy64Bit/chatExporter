@@ -1,8 +1,14 @@
-import { React, Forms, Text, Button, TextInput, Select, Slider, Alerts, RestAPI, Constants, ChannelStore, SelectedChannelStore, UserStore, SnowflakeUtils, showToast, Toasts } from "@webpack/common";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { Divider } from "@components/Divider";
-import { FormSwitch } from "@components/FormSwitch";
-import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { Logger } from "@utils/Logger";
+import definePlugin, { PluginNative } from "@utils/types";
+import { Alerts, Button, ChannelStore, Constants, Forms, React, RestAPI, Select, SelectedChannelStore, showToast, SnowflakeUtils, Text, TextInput, Toasts,UserStore } from "@webpack/common";
+
 import { settings } from "./settings";
 
 const logger = new Logger("ChatExporter");
@@ -147,14 +153,14 @@ async function fetchAllMessages(channelId: string, progressCallback?: (count: nu
 
 function formatFileName(channel: any): string {
   const date = new Date();
-  const dateStr = date.toISOString().split('T')[0];
+  const dateStr = date.toISOString().split("T")[0];
 
   if (channel.name) {
     return `discord-${channel.name}-${dateStr}`;
   }
 
   if (channel.recipients?.length) {
-    const names = channel.recipients.map((r: any) => r.username).join('-');
+    const names = channel.recipients.map((r: any) => r.username).join("-");
     return `discord-dm-${names}-${dateStr}`;
   }
 
@@ -162,7 +168,7 @@ function formatFileName(channel: any): string {
 }
 
 async function handleDownload(name: string, content: string, type: string, messages?: Message[]) {
-  const exportPath = settings.store.exportPath;
+  const { exportPath } = settings.store;
   const shouldDownloadMedia = settings.store.downloadMedia;
 
   if (exportPath && typeof exportPath === "string" && !IS_WEB) {
@@ -239,7 +245,7 @@ function exportToHTML(channel: any, messages: Message[]) {
   const date = new Date().toLocaleString();
 
   const messageHTML = messages.map(msg => {
-    const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const fullDate = new Date(msg.timestamp).toLocaleDateString();
     const avatarUrl = msg.author.avatar
       ? `https://cdn.discordapp.com/avatars/${msg.author.id}/${msg.author.avatar}.webp`
@@ -256,15 +262,15 @@ function exportToHTML(channel: any, messages: Message[]) {
           <div class="text">${msg.content || ""}</div>
           ${msg.attachments.map(a => `
             <div class="attachment">
-              ${a.contentType?.startsWith('image/')
+              ${a.contentType?.startsWith("image/")
         ? `<img src="${a.url}" style="max-width: 400px; max-height: 400px; border-radius: 8px; margin-top: 8px;">`
         : `<a href="${a.url}" target="_blank">File: ${a.filename}</a>`}
             </div>
-          `).join('')}
+          `).join("")}
         </div>
       </div>
     `;
-  }).join('');
+  }).join("");
 
   return `
     <!DOCTYPE html>
@@ -348,7 +354,7 @@ export default definePlugin({
         onConfirm: async () => {
           try {
             showToast("Starting export...", Toasts.Type.MESSAGE);
-            const messages = await fetchAllMessages(channelId, (count) => {
+            const messages = await fetchAllMessages(channelId, count => {
               if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
             });
             const data = {
@@ -390,7 +396,7 @@ export default definePlugin({
         onConfirm: async () => {
           try {
             showToast("Starting export...", Toasts.Type.MESSAGE);
-            const messages = await fetchAllMessages(channelId, (count) => {
+            const messages = await fetchAllMessages(channelId, count => {
               if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
             });
             const csv = exportToCSV(messages);
@@ -420,7 +426,7 @@ export default definePlugin({
         onConfirm: async () => {
           try {
             showToast("Starting export...", Toasts.Type.MESSAGE);
-            const messages = await fetchAllMessages(channelId, (count) => {
+            const messages = await fetchAllMessages(channelId, count => {
               if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
             });
             const html = exportToHTML(channel, messages);
@@ -428,7 +434,7 @@ export default definePlugin({
             Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
           } catch (error: any) {
             logger.error("Export failed:", error);
-            const errorMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+            const errorMsg = error?.message || (typeof error === "object" ? JSON.stringify(error) : String(error));
             Alerts.show({
               title: "Export Failed",
               body: "Export failed: " + errorMsg,
@@ -443,7 +449,7 @@ export default definePlugin({
   settingsAboutComponent: () => {
     const [exporting, setExporting] = React.useState(false);
     const [progress, setProgress] = React.useState(0);
-    const [format, setFormat] = React.useState<'json' | 'csv' | 'html'>('json');
+    const [format, setFormat] = React.useState<"json" | "csv" | "html">("json");
     const { exportPath, messageLimit, downloadMedia, filterStartDate, filterEndDate, filterUserId } = settings.use([
       "exportPath", "messageLimit", "downloadMedia", "filterStartDate", "filterEndDate", "filterUserId"
     ]);
@@ -451,7 +457,7 @@ export default definePlugin({
     const channelId = SelectedChannelStore.getChannelId();
     const channel = ChannelStore.getChannel(channelId);
 
-    const handleExport = async (format: 'json' | 'csv' | 'html') => {
+    const handleExport = async (format: "json" | "csv" | "html") => {
       if (!channel) {
         Alerts.show({ title: "Error", body: "No channel selected" });
         return;
@@ -463,14 +469,14 @@ export default definePlugin({
       try {
         const messages = await fetchAllMessages(channelId, setProgress);
 
-        if (format === 'json') {
+        if (format === "json") {
           const data = {
             channel: { id: channel.id, name: channel.name, type: channel.type },
             exportedAt: new Date().toISOString(),
             messages
           };
           await handleDownload(`${formatFileName(channel)}.json`, JSON.stringify(data, null, 2), "application/json", messages);
-        } else if (format === 'csv') {
+        } else if (format === "csv") {
           const csv = exportToCSV(messages);
           await handleDownload(`${formatFileName(channel)}.csv`, csv, "text/csv", messages);
         } else {
@@ -481,7 +487,7 @@ export default definePlugin({
         Alerts.show({ title: "Success", body: `Exported ${messages.length} messages successfully!` });
       } catch (error: any) {
         logger.error("Export failed:", error);
-        const errorMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+        const errorMsg = error?.message || (typeof error === "object" ? JSON.stringify(error) : String(error));
         Alerts.show({ title: "Error", body: "Export failed: " + errorMsg });
       } finally {
         setExporting(false);
@@ -590,8 +596,8 @@ export default definePlugin({
                     const end = new Date();
                     const start = new Date();
                     start.setDate(end.getDate() - p.days);
-                    settings.store.filterStartDate = start.toISOString().split('T')[0];
-                    settings.store.filterEndDate = end.toISOString().split('T')[0];
+                    settings.store.filterStartDate = start.toISOString().split("T")[0];
+                    settings.store.filterEndDate = end.toISOString().split("T")[0];
                   }
                 }}
               >
