@@ -71,7 +71,3 @@ To use the **User ID** filter, you need the unique numerical ID of the user:
 ## 📝 License
 
 This project is licensed under the GPL-3.0 License - see the LICENSE file for details.
-
----
-
-*Made with ❤️ for the Vencord community.*
