@@ -4,254 +4,273 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Divider } from "@components/Divider";
-import { Logger } from "@utils/Logger";
-import definePlugin, { PluginNative } from "@utils/types";
-import { Alerts, Button, ChannelStore, Constants, Forms, React, RestAPI, Select, SelectedChannelStore, showToast, SnowflakeUtils, Text, TextInput, Toasts,UserStore } from "@webpack/common";
+import { Divider } from '@components/Divider';
+import { Logger } from '@utils/Logger';
+import definePlugin, { PluginNative } from '@utils/types';
+import {
+	Alerts,
+	Button,
+	ChannelStore,
+	Constants,
+	Forms,
+	React,
+	RestAPI,
+	Select,
+	SelectedChannelStore,
+	showToast,
+	SnowflakeUtils,
+	Text,
+	TextInput,
+	UserStore,
+} from '@webpack/common';
 
-import { settings } from "./settings";
+import { settings } from './settings';
 
-const logger = new Logger("ChatExporter");
-const Native = VencordNative.pluginHelpers["Chat Exporter"] as PluginNative<typeof import("./native")>;
+const logger = new Logger('ChatExporter');
+const Native = VencordNative.pluginHelpers['Chat Exporter'] as PluginNative<typeof import('./native')>;
 
 interface Message {
-  id: string;
-  content: string;
-  author: {
-    id: string;
-    username: string;
-    globalName?: string;
-    discriminator: string;
-    avatar: string | null;
-  };
-  timestamp: string;
-  editedTimestamp?: string;
-  attachments: any[];
-  embeds: any[];
-  reactions: any[];
-  mentions: any[];
-  pinned: boolean;
-  type: number;
+	id: string;
+	content: string;
+	author: {
+		id: string;
+		username: string;
+		globalName?: string;
+		discriminator: string;
+		avatar: string | null;
+	};
+	timestamp: string;
+	editedTimestamp?: string;
+	attachments: any[];
+	embeds: any[];
+	reactions: any[];
+	mentions: any[];
+	pinned: boolean;
+	type: number;
 }
 
 async function fetchAllMessages(channelId: string, progressCallback?: (count: number) => void) {
-  let allMessages: Message[] = [];
-  let before: string | undefined = undefined;
-  let totalFetched = 0;
-  const limit = settings.store.messageLimit;
-  const { filterStartDate, filterEndDate, filterUserId } = settings.store;
+	let allMessages: Message[] = [];
+	let before: string | undefined = undefined;
+	let totalFetched = 0;
+	const limit = settings.store.messageLimit;
+	const { filterStartDate, filterEndDate, filterUserId } = settings.store;
 
-  const currentUser = UserStore.getCurrentUser();
+	const currentUser = UserStore.getCurrentUser();
 
-  // Convert dates to snowflakes if provided
-  let afterSnowflake: string | undefined = undefined;
-  let beforeSnowflake: string | undefined = undefined;
+	// Convert dates to snowflakes if provided
+	let afterSnowflake: string | undefined = undefined;
+	let beforeSnowflake: string | undefined = undefined;
 
-  if (filterStartDate && SnowflakeUtils) {
-    try {
-      const startTimestamp = new Date(filterStartDate).getTime();
-      if (!isNaN(startTimestamp)) afterSnowflake = SnowflakeUtils.fromTimestamp(startTimestamp);
-    } catch (err) {
-      logger.error("Failed to convert start date to snowflake:", err);
-    }
-  }
+	if (filterStartDate && SnowflakeUtils) {
+		try {
+			const startTimestamp = new Date(filterStartDate).getTime();
+			if (!isNaN(startTimestamp)) afterSnowflake = SnowflakeUtils.fromTimestamp(startTimestamp);
+		} catch (err) {
+			logger.error('Failed to convert start date to snowflake:', err);
+		}
+	}
 
-  if (filterEndDate && SnowflakeUtils) {
-    try {
-      const endTimestamp = new Date(filterEndDate).getTime();
-      if (!isNaN(endTimestamp)) beforeSnowflake = SnowflakeUtils.fromTimestamp(endTimestamp);
-    } catch (err) {
-      logger.error("Failed to convert end date to snowflake:", err);
-    }
-  }
+	if (filterEndDate && SnowflakeUtils) {
+		try {
+			const endTimestamp = new Date(filterEndDate).getTime();
+			if (!isNaN(endTimestamp)) beforeSnowflake = SnowflakeUtils.fromTimestamp(endTimestamp);
+		} catch (err) {
+			logger.error('Failed to convert end date to snowflake:', err);
+		}
+	}
 
-  try {
-    while (true) {
-      if (limit > 0 && totalFetched >= limit) break;
+	try {
+		while (true) {
+			if (limit > 0 && totalFetched >= limit) break;
 
-      const query: any = {
-        limit: Math.floor(Math.min(100, limit > 0 ? limit - totalFetched : 100))
-      };
+			const query: any = {
+				limit: Math.floor(Math.min(100, limit > 0 ? limit - totalFetched : 100)),
+			};
 
-      if (before) {
-        query.before = before;
-      } else if (beforeSnowflake) {
-        query.before = beforeSnowflake;
-      }
+			if (before) {
+				query.before = before;
+			} else if (beforeSnowflake) {
+				query.before = beforeSnowflake;
+			}
 
-      if (afterSnowflake) {
-        query.after = afterSnowflake;
-      }
+			if (afterSnowflake) {
+				query.after = afterSnowflake;
+			}
 
-      logger.debug("Fetching messages with query:", query);
+			logger.debug('Fetching messages with query:', query);
 
-      const res = await RestAPI.get({
-        url: Constants.Endpoints.MESSAGES(channelId),
-        query
-      });
+			const res = await RestAPI.get({
+				url: Constants.Endpoints.MESSAGES(channelId),
+				query,
+			});
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch messages: ${res.status}`);
-      }
+			if (!res.ok) {
+				throw new Error(`Failed to fetch messages: ${res.status}`);
+			}
 
-      const batch = res.body;
-      if (!batch || batch.length === 0) break;
+			const batch = res.body;
+			if (!batch || batch.length === 0) break;
 
-      const messages: Message[] = batch
-        .map((m: any) => ({
-          id: m.id,
-          content: m.content || "",
-          author: {
-            id: m.author?.id || "unknown",
-            username: m.author?.username || "Unknown",
-            globalName: m.author?.global_name,
-            discriminator: m.author?.discriminator || "0000",
-            avatar: m.author?.avatar || null
-          },
-          timestamp: m.timestamp,
-          editedTimestamp: m.edited_timestamp,
-          attachments: m.attachments?.map((a: any) => ({
-            id: a.id,
-            filename: a.filename,
-            url: a.url,
-            size: a.size,
-            contentType: a.content_type
-          })) || [],
-          embeds: m.embeds || [],
-          reactions: m.reactions?.map((r: any) => ({
-            emoji: r.emoji,
-            count: r.count
-          })) || [],
-          mentions: m.mentions || [],
-          pinned: !!m.pinned,
-          type: m.type || 0
-        }))
-        // Filter by User ID if set
-        .filter((m: Message) => !filterUserId || m.author.id === filterUserId);
+			const messages: Message[] = batch
+				.map((m: any) => ({
+					id: m.id,
+					content: m.content || '',
+					author: {
+						id: m.author?.id || 'unknown',
+						username: m.author?.username || 'Unknown',
+						globalName: m.author?.global_name,
+						discriminator: m.author?.discriminator || '0000',
+						avatar: m.author?.avatar || null,
+					},
+					timestamp: m.timestamp,
+					editedTimestamp: m.edited_timestamp,
+					attachments:
+						m.attachments?.map((a: any) => ({
+							id: a.id,
+							filename: a.filename,
+							url: a.url,
+							size: a.size,
+							contentType: a.content_type,
+						})) || [],
+					embeds: m.embeds || [],
+					reactions:
+						m.reactions?.map((r: any) => ({
+							emoji: r.emoji,
+							count: r.count,
+						})) || [],
+					mentions: m.mentions || [],
+					pinned: !!m.pinned,
+					type: m.type || 0,
+				}))
+				// Filter by User ID if set
+				.filter((m: Message) => !filterUserId || m.author.id === filterUserId);
 
-      allMessages = [...allMessages, ...messages];
-      totalFetched += messages.length;
+			allMessages = [...allMessages, ...messages];
+			totalFetched += messages.length;
 
-      progressCallback?.(totalFetched);
+			progressCallback?.(totalFetched);
 
-      if (batch.length < 100) break;
-      before = batch[batch.length - 1].id;
+			if (batch.length < 100) break;
+			before = batch[batch.length - 1].id;
 
-      // If we've reached or gone past the 'after' snowflake, we can stop
-      if (afterSnowflake && before && BigInt(before) <= BigInt(afterSnowflake)) break;
+			// If we've reached or gone past the 'after' snowflake, we can stop
+			if (afterSnowflake && before && BigInt(before) <= BigInt(afterSnowflake)) break;
 
-      const delay = (currentUser?.premiumType ?? 0) > 0 ? 200 : 600;
-      await new Promise(r => setTimeout(r, delay));
-    }
-  } catch (error) {
-    logger.error("Error fetching messages:", error);
-    throw error;
-  }
+			const delay = (currentUser?.premiumType ?? 0) > 0 ? 200 : 600;
+			await new Promise((r) => setTimeout(r, delay));
+		}
+	} catch (error) {
+		logger.error('Error fetching messages:', error);
+		throw error;
+	}
 
-  return allMessages.reverse();
+	return allMessages.reverse();
 }
 
 function formatFileName(channel: any): string {
-  const date = new Date();
-  const dateStr = date.toISOString().split("T")[0];
+	const date = new Date();
+	const dateStr = date.toISOString().split('T')[0];
 
-  if (channel.name) {
-    return `discord-${channel.name}-${dateStr}`;
-  }
+	if (channel.name) {
+		return `discord-${channel.name}-${dateStr}`;
+	}
 
-  if (channel.recipients?.length) {
-    const names = channel.recipients.map((r: any) => r.username).join("-");
-    return `discord-dm-${names}-${dateStr}`;
-  }
+	if (channel.recipients?.length) {
+		const names = channel.recipients.map((r: any) => r.username).join('-');
+		return `discord-dm-${names}-${dateStr}`;
+	}
 
-  return `discord-channel-${channel.id}-${dateStr}`;
+	return `discord-channel-${channel.id}-${dateStr}`;
 }
 
 async function handleDownload(name: string, content: string, type: string, messages?: Message[]) {
-  const { exportPath } = settings.store;
-  const shouldDownloadMedia = settings.store.downloadMedia;
+	const { exportPath } = settings.store;
+	const shouldDownloadMedia = settings.store.downloadMedia;
 
-  if (exportPath && typeof exportPath === "string" && !IS_WEB) {
-    // Phase 3: Create a unique subfolder for this export
-    const folderName = name.replace(/\.(json|csv|html)$/, "");
-    const subfolderPath = exportPath + "/" + folderName;
+	if (exportPath && typeof exportPath === 'string' && !IS_WEB) {
+		// Phase 3: Create a unique subfolder for this export
+		const folderName = name.replace(/\.(json|csv|html)$/, '');
+		const subfolderPath = exportPath + '/' + folderName;
 
-    // Save the manifest file (JSON/CSV/HTML) inside the subfolder
-    const res = await Native.saveFile(subfolderPath, name, content);
-    if (res.ok) {
-      showToast(`Saved ${name} to ${subfolderPath}`, Toasts.Type.SUCCESS);
+		// Save the manifest file (JSON/CSV/HTML) inside the subfolder
+		const res = await Native.saveFile(subfolderPath, name, content);
+		if (res.ok) {
+			showToast(`Saved ${name} to ${subfolderPath}`, 'success');
 
-      // Handle Media Downloading
-      if (shouldDownloadMedia && messages) {
-        const attachments = messages.flatMap(m => m.attachments.map(a => ({ ...a, messageId: m.id })));
-        if (attachments.length > 0) {
-          showToast(`Downloading ${attachments.length} attachments...`, Toasts.Type.MESSAGE);
-          const mediaFolder = "attachments";
+			// Handle Media Downloading
+			if (shouldDownloadMedia && messages) {
+				const attachments = messages.flatMap((m) => m.attachments.map((a) => ({ ...a, messageId: m.id })));
+				if (attachments.length > 0) {
+					showToast(`Downloading ${attachments.length} attachments...`);
+					const mediaFolder = 'attachments';
 
-          for (let i = 0; i < attachments.length; i++) {
-            const a = attachments[i];
-            try {
-              const fileRes = await fetch(a.url);
-              if (fileRes.ok) {
-                const buffer = await fileRes.arrayBuffer();
-                const fileName = `${a.messageId}_${a.filename}`;
-                await Native.saveFile(`${subfolderPath}/${mediaFolder}`, fileName, new Uint8Array(buffer));
-              }
-            } catch (err) {
-              logger.error(`Failed to download attachment ${a.filename}:`, err);
-            }
-            if ((i + 1) % 10 === 0) showToast(`Downloaded ${i + 1}/${attachments.length} items...`, Toasts.Type.MESSAGE);
-          }
-          showToast("Media download complete!", Toasts.Type.SUCCESS);
-        }
-      }
-    } else {
-      showToast(`Failed to save: ${res.error}`, Toasts.Type.FAILURE);
-      downloadFile(name, content, type);
-    }
-  } else {
-    downloadFile(name, content, type);
-  }
+					for (let i = 0; i < attachments.length; i++) {
+						const a = attachments[i];
+						try {
+							const fileRes = await fetch(a.url);
+							if (fileRes.ok) {
+								const buffer = await fileRes.arrayBuffer();
+								const fileName = `${a.messageId}_${a.filename}`;
+								await Native.saveFile(`${subfolderPath}/${mediaFolder}`, fileName, new Uint8Array(buffer));
+							}
+						} catch (err) {
+							logger.error(`Failed to download attachment ${a.filename}:`, err);
+						}
+						if ((i + 1) % 10 === 0) showToast(`Downloaded ${i + 1}/${attachments.length} items...`);
+					}
+					showToast('Media download complete!', 'success');
+				}
+			}
+		} else {
+			showToast(`Failed to save: ${res.error}`, 'failure');
+			downloadFile(name, content, type);
+		}
+	} else {
+		downloadFile(name, content, type);
+	}
 }
 
 function downloadFile(name: string, content: string, type: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+	const blob = new Blob([content], { type });
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = name;
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+	URL.revokeObjectURL(url);
 }
 
 function exportToCSV(messages: Message[]) {
-  const headers = ["ID", "Timestamp", "Author", "Content", "Attachments", "Reactions"];
-  const rows = messages.map(msg => [
-    msg.id,
-    new Date(msg.timestamp).toISOString(),
-    `"${msg.author.username}#${msg.author.discriminator}"`,
-    `"${msg.content.replace(/"/g, '""')}"`,
-    msg.attachments.length,
-    msg.reactions.length
-  ]);
+	const headers = ['ID', 'Timestamp', 'Author', 'Content', 'Attachments', 'Reactions'];
+	const rows = messages.map((msg) => [
+		msg.id,
+		new Date(msg.timestamp).toISOString(),
+		`"${msg.author.username}#${msg.author.discriminator}"`,
+		`"${msg.content.replace(/"/g, '""')}"`,
+		msg.attachments.length,
+		msg.reactions.length,
+	]);
 
-  return [headers, ...rows].map(row => row.join(",")).join("\n");
+	return [headers, ...rows].map((row) => row.join(',')).join('\n');
 }
 
 function exportToHTML(channel: any, messages: Message[]) {
-  const channelName = channel.name || "Direct Message";
-  const date = new Date().toLocaleString();
+	const channelName = channel.name || 'Direct Message';
+	const date = new Date().toLocaleString();
 
-  const messageHTML = messages.map(msg => {
-    const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    const fullDate = new Date(msg.timestamp).toLocaleDateString();
-    const avatarUrl = msg.author.avatar
-      ? `https://cdn.discordapp.com/avatars/${msg.author.id}/${msg.author.avatar}.webp`
-      : `https://cdn.discordapp.com/embed/avatars/${parseInt(msg.author.id) % 5}.png`;
+	const messageHTML = messages
+		.map((msg) => {
+			const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+			const fullDate = new Date(msg.timestamp).toLocaleDateString();
+			const avatarUrl =
+				msg.author.avatar ?
+					`https://cdn.discordapp.com/avatars/${msg.author.id}/${msg.author.avatar}.webp`
+				:	`https://cdn.discordapp.com/embed/avatars/${parseInt(msg.author.id) % 5}.png`;
 
-    return `
+			return `
       <div class="message">
         <img class="avatar" src="${avatarUrl}" alt="Avatar">
         <div class="msg-content">
@@ -259,20 +278,27 @@ function exportToHTML(channel: any, messages: Message[]) {
             <span class="author">${msg.author.globalName || msg.author.username}</span>
             <span class="timestamp" title="${fullDate}">${time}</span>
           </div>
-          <div class="text">${msg.content || ""}</div>
-          ${msg.attachments.map(a => `
+          <div class="text">${msg.content || ''}</div>
+          ${msg.attachments
+						.map(
+							(a) => `
             <div class="attachment">
-              ${a.contentType?.startsWith("image/")
-        ? `<img src="${a.url}" style="max-width: 400px; max-height: 400px; border-radius: 8px; margin-top: 8px;">`
-        : `<a href="${a.url}" target="_blank">File: ${a.filename}</a>`}
+              ${
+								a.contentType?.startsWith('image/') ?
+									`<img src="${a.url}" style="max-width: 400px; max-height: 400px; border-radius: 8px; margin-top: 8px;">`
+								:	`<a href="${a.url}" target="_blank">File: ${a.filename}</a>`
+							}
             </div>
-          `).join("")}
+          `,
+						)
+						.join('')}
         </div>
       </div>
     `;
-  }).join("");
+		})
+		.join('');
 
-  return `
+	return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -312,12 +338,12 @@ function exportToHTML(channel: any, messages: Message[]) {
 }
 
 export default definePlugin({
-  name: "Chat Exporter",
-  description: "Export entire channel/group chat to JSON, CSV, or HTML",
-  authors: [{ name: "You", id: 123456789n }],
-  version: "1.3.0",
-  settings,
-  css: `
+	name: 'Chat Exporter',
+	description: 'Export entire channel/group chat to JSON, CSV, or HTML',
+	authors: [{ name: 'You', id: 123456789n }],
+	version: '1.3.0',
+	settings,
+	css: `
     @keyframes exporter-pulse {
       0% { opacity: 0.4; }
       50% { opacity: 1; }
@@ -328,316 +354,329 @@ export default definePlugin({
     }
   `,
 
-  start() {
-    logger.info("Chat Exporter plugin started");
-  },
+	start() {
+		logger.info('Chat Exporter plugin started');
+	},
 
-  stop() {
-    logger.info("Chat Exporter plugin stopped");
-  },
+	stop() {
+		logger.info('Chat Exporter plugin stopped');
+	},
 
-  toolboxActions: {
-    "Export Chat (JSON)": () => {
-      const channelId = SelectedChannelStore.getChannelId();
-      const channel = ChannelStore.getChannel(channelId);
+	toolboxActions: {
+		'Export Chat (JSON)': () => {
+			const channelId = SelectedChannelStore.getChannelId();
+			const channel = ChannelStore.getChannel(channelId);
 
-      if (!channel) {
-        Alerts.show({ title: "Error", body: "No channel selected" });
-        return;
-      }
+			if (!channel) {
+				Alerts.show({ title: 'Error', body: 'No channel selected' });
+				return;
+			}
 
-      Alerts.show({
-        title: "Confirm Export",
-        body: `Export messages from #${channel.name || "DM"} as JSON?\nThis may take a while.`,
-        confirmText: "Export",
-        cancelText: "Cancel",
-        onConfirm: async () => {
-          try {
-            showToast("Starting export...", Toasts.Type.MESSAGE);
-            const messages = await fetchAllMessages(channelId, count => {
-              if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
-            });
-            const data = {
-              metadata: {
-                version: "2.1",
-                exportDate: new Date().toISOString(),
-                exporter: "Chat Exporter Plugin"
-              },
-              channel: {
-                id: channel.id,
-                name: channel.name,
-                type: channel.type
-              },
-              messages
-            };
-            await handleDownload(`${formatFileName(channel)}.json`, JSON.stringify(data, null, 2), "application/json", messages);
-            Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
-          } catch (error) {
-            Alerts.show({ title: "Error", body: "Export failed. Check console for details." });
-          }
-        }
-      });
-    },
+			Alerts.show({
+				title: 'Confirm Export',
+				body: `Export messages from #${channel.name || 'DM'} as JSON?\nThis may take a while.`,
+				confirmText: 'Export',
+				cancelText: 'Cancel',
+				onConfirm: async () => {
+					try {
+						showToast('Starting export...');
+						const messages = await fetchAllMessages(channelId, (count) => {
+							if (count % 500 === 0) showToast(`Fetched ${count} messages...`);
+						});
+						const data = {
+							metadata: {
+								version: '2.1',
+								exportDate: new Date().toISOString(),
+								exporter: 'Chat Exporter Plugin',
+							},
+							channel: {
+								id: channel.id,
+								name: channel.name,
+								type: channel.type,
+							},
+							messages,
+						};
+						await handleDownload(
+							`${formatFileName(channel)}.json`,
+							JSON.stringify(data, null, 2),
+							'application/json',
+							messages,
+						);
+						Alerts.show({ title: 'Success', body: `Successfully exported ${messages.length} messages!` });
+					} catch (error) {
+						Alerts.show({ title: 'Error', body: 'Export failed. Check console for details.' });
+					}
+				},
+			});
+		},
 
-    "Export Chat (CSV)": () => {
-      const channelId = SelectedChannelStore.getChannelId();
-      const channel = ChannelStore.getChannel(channelId);
+		'Export Chat (CSV)': () => {
+			const channelId = SelectedChannelStore.getChannelId();
+			const channel = ChannelStore.getChannel(channelId);
 
-      if (!channel) {
-        Alerts.show({ title: "Error", body: "No channel selected" });
-        return;
-      }
+			if (!channel) {
+				Alerts.show({ title: 'Error', body: 'No channel selected' });
+				return;
+			}
 
-      Alerts.show({
-        title: "Confirm Export",
-        body: `Export messages from #${channel.name || "DM"} as CSV?\nThis may take a while.`,
-        confirmText: "Export",
-        cancelText: "Cancel",
-        onConfirm: async () => {
-          try {
-            showToast("Starting export...", Toasts.Type.MESSAGE);
-            const messages = await fetchAllMessages(channelId, count => {
-              if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
-            });
-            const csv = exportToCSV(messages);
-            await handleDownload(`${formatFileName(channel)}.csv`, csv, "text/csv", messages);
-            Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
-          } catch (error) {
-            Alerts.show({ title: "Error", body: "Export failed." });
-          }
-        }
-      });
-    },
+			Alerts.show({
+				title: 'Confirm Export',
+				body: `Export messages from #${channel.name || 'DM'} as CSV?\nThis may take a while.`,
+				confirmText: 'Export',
+				cancelText: 'Cancel',
+				onConfirm: async () => {
+					try {
+						showToast('Starting export...');
+						const messages = await fetchAllMessages(channelId, (count) => {
+							if (count % 500 === 0) showToast(`Fetched ${count} messages...`);
+						});
+						const csv = exportToCSV(messages);
+						await handleDownload(`${formatFileName(channel)}.csv`, csv, 'text/csv', messages);
+						Alerts.show({ title: 'Success', body: `Successfully exported ${messages.length} messages!` });
+					} catch (error) {
+						Alerts.show({ title: 'Error', body: 'Export failed.' });
+					}
+				},
+			});
+		},
 
-    "Export Chat (HTML)": () => {
-      const channelId = SelectedChannelStore.getChannelId();
-      const channel = ChannelStore.getChannel(channelId);
+		'Export Chat (HTML)': () => {
+			const channelId = SelectedChannelStore.getChannelId();
+			const channel = ChannelStore.getChannel(channelId);
 
-      if (!channel) {
-        Alerts.show({ title: "Error", body: "No channel selected" });
-        return;
-      }
+			if (!channel) {
+				Alerts.show({ title: 'Error', body: 'No channel selected' });
+				return;
+			}
 
-      Alerts.show({
-        title: "Confirm Export",
-        body: `Export messages from #${channel.name || "DM"} as HTML?\nThis will create a viewable file that looks like Discord.`,
-        confirmText: "Export",
-        cancelText: "Cancel",
-        onConfirm: async () => {
-          try {
-            showToast("Starting export...", Toasts.Type.MESSAGE);
-            const messages = await fetchAllMessages(channelId, count => {
-              if (count % 500 === 0) showToast(`Fetched ${count} messages...`, Toasts.Type.MESSAGE);
-            });
-            const html = exportToHTML(channel, messages);
-            await handleDownload(`${formatFileName(channel)}.html`, html, "text/html", messages);
-            Alerts.show({ title: "Success", body: `Successfully exported ${messages.length} messages!` });
-          } catch (error: any) {
-            logger.error("Export failed:", error);
-            const errorMsg = error?.message || (typeof error === "object" ? JSON.stringify(error) : String(error));
-            Alerts.show({
-              title: "Export Failed",
-              body: "Export failed: " + errorMsg,
-              confirmText: "Close"
-            });
-          }
-        }
-      });
-    }
-  },
+			Alerts.show({
+				title: 'Confirm Export',
+				body: `Export messages from #${channel.name || 'DM'} as HTML?\nThis will create a viewable file that looks like Discord.`,
+				confirmText: 'Export',
+				cancelText: 'Cancel',
+				onConfirm: async () => {
+					try {
+						showToast('Starting export...');
+						const messages = await fetchAllMessages(channelId, (count) => {
+							if (count % 500 === 0) showToast(`Fetched ${count} messages...`);
+						});
+						const html = exportToHTML(channel, messages);
+						await handleDownload(`${formatFileName(channel)}.html`, html, 'text/html', messages);
+						Alerts.show({ title: 'Success', body: `Successfully exported ${messages.length} messages!` });
+					} catch (error: any) {
+						logger.error('Export failed:', error);
+						const errorMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+						Alerts.show({
+							title: 'Export Failed',
+							body: 'Export failed: ' + errorMsg,
+							confirmText: 'Close',
+						});
+					}
+				},
+			});
+		},
+	},
 
-  settingsAboutComponent: () => {
-    const [exporting, setExporting] = React.useState(false);
-    const [progress, setProgress] = React.useState(0);
-    const [format, setFormat] = React.useState<"json" | "csv" | "html">("json");
-    const { exportPath, messageLimit, downloadMedia, filterStartDate, filterEndDate, filterUserId } = settings.use([
-      "exportPath", "messageLimit", "downloadMedia", "filterStartDate", "filterEndDate", "filterUserId"
-    ]);
+	settingsAboutComponent: () => {
+		const [exporting, setExporting] = React.useState(false);
+		const [progress, setProgress] = React.useState(0);
+		const [format, setFormat] = React.useState<'json' | 'csv' | 'html'>('json');
+		const { exportPath, messageLimit, downloadMedia, filterStartDate, filterEndDate, filterUserId } = settings.use([
+			'exportPath',
+			'messageLimit',
+			'downloadMedia',
+			'filterStartDate',
+			'filterEndDate',
+			'filterUserId',
+		]);
 
-    const channelId = SelectedChannelStore.getChannelId();
-    const channel = ChannelStore.getChannel(channelId);
+		const channelId = SelectedChannelStore.getChannelId();
+		const channel = ChannelStore.getChannel(channelId);
 
-    const handleExport = async (format: "json" | "csv" | "html") => {
-      if (!channel) {
-        Alerts.show({ title: "Error", body: "No channel selected" });
-        return;
-      }
+		const handleExport = async (format: 'json' | 'csv' | 'html') => {
+			if (!channel) {
+				Alerts.show({ title: 'Error', body: 'No channel selected' });
+				return;
+			}
 
-      setExporting(true);
-      setProgress(0);
+			setExporting(true);
+			setProgress(0);
 
-      try {
-        const messages = await fetchAllMessages(channelId, setProgress);
+			try {
+				const messages = await fetchAllMessages(channelId, setProgress);
 
-        if (format === "json") {
-          const data = {
-            channel: { id: channel.id, name: channel.name, type: channel.type },
-            exportedAt: new Date().toISOString(),
-            messages
-          };
-          await handleDownload(`${formatFileName(channel)}.json`, JSON.stringify(data, null, 2), "application/json", messages);
-        } else if (format === "csv") {
-          const csv = exportToCSV(messages);
-          await handleDownload(`${formatFileName(channel)}.csv`, csv, "text/csv", messages);
-        } else {
-          const html = exportToHTML(channel, messages);
-          await handleDownload(`${formatFileName(channel)}.html`, html, "text/html", messages);
-        }
+				if (format === 'json') {
+					const data = {
+						channel: { id: channel.id, name: channel.name, type: channel.type },
+						exportedAt: new Date().toISOString(),
+						messages,
+					};
+					await handleDownload(
+						`${formatFileName(channel)}.json`,
+						JSON.stringify(data, null, 2),
+						'application/json',
+						messages,
+					);
+				} else if (format === 'csv') {
+					const csv = exportToCSV(messages);
+					await handleDownload(`${formatFileName(channel)}.csv`, csv, 'text/csv', messages);
+				} else {
+					const html = exportToHTML(channel, messages);
+					await handleDownload(`${formatFileName(channel)}.html`, html, 'text/html', messages);
+				}
 
-        Alerts.show({ title: "Success", body: `Exported ${messages.length} messages successfully!` });
-      } catch (error: any) {
-        logger.error("Export failed:", error);
-        const errorMsg = error?.message || (typeof error === "object" ? JSON.stringify(error) : String(error));
-        Alerts.show({ title: "Error", body: "Export failed: " + errorMsg });
-      } finally {
-        setExporting(false);
-      }
-    };
+				Alerts.show({ title: 'Success', body: `Exported ${messages.length} messages successfully!` });
+			} catch (error: any) {
+				logger.error('Export failed:', error);
+				const errorMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+				Alerts.show({ title: 'Error', body: 'Export failed: ' + errorMsg });
+			} finally {
+				setExporting(false);
+			}
+		};
 
-    const handleSelectFolder = async () => {
-      const path = await Native.selectFolder();
-      if (path) {
-        settings.store.exportPath = path;
-      }
-    };
+		const handleSelectFolder = async () => {
+			const path = await Native.selectFolder();
+			if (path) {
+				settings.store.exportPath = path;
+			}
+		};
 
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+		return (
+			<div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+				<div>
+					<Forms.FormText>
+						Export complete chat history from the currently selected channel:{' '}
+						<strong>#{channel?.name || 'No channel selected'}</strong>
+					</Forms.FormText>
+				</div>
 
-        <div>
-          <Forms.FormText>
-            Export complete chat history from the currently selected channel: <strong>#{channel?.name || "No channel selected"}</strong>
-          </Forms.FormText>
-        </div>
+				<div>
+					<Forms.FormTitle tag="h5">Export Path</Forms.FormTitle>
+					<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+						<Forms.FormText
+							style={{
+								flex: 1,
+								margin: 0,
+								padding: '8px',
+								background: 'var(--background-secondary)',
+								borderRadius: '4px',
+							}}
+						>
+							{exportPath || 'Not set (downloads to browser default)'}
+						</Forms.FormText>
+						<Button size={Button.Sizes.SMALL} onClick={handleSelectFolder} disabled={IS_WEB}>
+							Select Folder
+						</Button>
+					</div>
+				</div>
 
-        <div>
-          <Forms.FormTitle tag="h5">Export Path</Forms.FormTitle>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <Forms.FormText style={{ flex: 1, margin: 0, padding: "8px", background: "var(--background-secondary)", borderRadius: "4px" }}>
-              {exportPath || "Not set (downloads to browser default)"}
-            </Forms.FormText>
-            <Button
-              size={Button.Sizes.SMALL}
-              onClick={handleSelectFolder}
-              disabled={IS_WEB}
-            >
-              Select Folder
-            </Button>
-          </div>
-        </div>
+				{exporting ?
+					<div style={{ margin: '12px 0' }}>
+						<Text>
+							Fetching messages... {progress} {messageLimit > 0 ? `/ ${messageLimit}` : ''} fetched
+						</Text>
+						<div
+							style={{
+								height: '4px',
+								background: 'var(--background-modifier-accent)',
+								borderRadius: '2px',
+								marginTop: '8px',
+							}}
+						>
+							<div
+								className={messageLimit === 0 ? 'exporter-pulsing' : ''}
+								style={{
+									width: `${messageLimit > 0 ? Math.min((progress / messageLimit) * 100, 100) : 100}%`,
+									height: '100%',
+									background: 'var(--green-360)',
+									borderRadius: '2px',
+									transition: 'width 0.3s',
+								}}
+							/>
+						</div>
+					</div>
+				:	<div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+						<div style={{ flex: 1 }}>
+							<Forms.FormTitle tag="h5">Select Format</Forms.FormTitle>
+							<Select
+								options={[
+									{ label: 'JSON (Complete Metadata)', value: 'json' },
+									{ label: 'CSV (Excel/Sheets)', value: 'csv' },
+									{ label: 'HTML (Discord-like view)', value: 'html' },
+								]}
+								isSelected={(v) => v === format}
+								select={(v) => setFormat(v as any)}
+								serialize={(v) => v}
+							/>
+						</div>
+						<Button
+							onClick={() => handleExport(format)}
+							color={Button.Colors.BRAND}
+							disabled={!channel}
+							style={{ padding: '10px 24px' }}
+						>
+							Export
+						</Button>
+					</div>
+				}
 
-        {exporting ? (
-          <div style={{ margin: "12px 0" }}>
-            <Text>Fetching messages... {progress} {messageLimit > 0 ? `/ ${messageLimit}` : ""} fetched</Text>
-            <div style={{
-              height: "4px",
-              background: "var(--background-modifier-accent)",
-              borderRadius: "2px",
-              marginTop: "8px"
-            }}>
-              <div
-                className={messageLimit === 0 ? "exporter-pulsing" : ""}
-                style={{
-                  width: `${messageLimit > 0 ? Math.min((progress / messageLimit) * 100, 100) : 100}%`,
-                  height: "100%",
-                  background: "var(--green-360)",
-                  borderRadius: "2px",
-                  transition: "width 0.3s"
-                }}
-              />
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-            <div style={{ flex: 1 }}>
-              <Forms.FormTitle tag="h5">Select Format</Forms.FormTitle>
-              <Select
-                options={[
-                  { label: "JSON (Complete Metadata)", value: "json" },
-                  { label: "CSV (Excel/Sheets)", value: "csv" },
-                  { label: "HTML (Discord-like view)", value: "html" }
-                ]}
-                isSelected={v => v === format}
-                select={v => setFormat(v as any)}
-                serialize={v => v}
-              />
-            </div>
-            <Button
-              onClick={() => handleExport(format)}
-              color={Button.Colors.BRAND}
-              disabled={!channel}
-              style={{ padding: "10px 24px" }}
-            >
-              Export
-            </Button>
-          </div>
-        )}
+				<Divider />
 
-        <Divider />
+				<div>
+					<Forms.FormTitle tag="h5">Quick Date Presets</Forms.FormTitle>
+					<div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+						{[
+							{ label: 'Today', days: 0 },
+							{ label: '7 Days', days: 7 },
+							{ label: '30 Days', days: 30 },
+							{ label: 'All Time', days: -1 },
+						].map((p) => (
+							<Button
+								key={p.label}
+								size={Button.Sizes.SMALL}
+								color={Button.Colors.PRIMARY}
+								onClick={() => {
+									if (p.days === -1) {
+										settings.store.filterStartDate = '';
+										settings.store.filterEndDate = '';
+									} else {
+										const end = new Date();
+										const start = new Date();
+										start.setDate(end.getDate() - p.days);
+										settings.store.filterStartDate = start.toISOString().split('T')[0];
+										settings.store.filterEndDate = end.toISOString().split('T')[0];
+									}
+								}}
+							>
+								{p.label}
+							</Button>
+						))}
+					</div>
 
-        <div>
-          <Forms.FormTitle tag="h5">Quick Date Presets</Forms.FormTitle>
-          <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-            {[
-              { label: "Today", days: 0 },
-              { label: "7 Days", days: 7 },
-              { label: "30 Days", days: 30 },
-              { label: "All Time", days: -1 }
-            ].map(p => (
-              <Button
-                key={p.label}
-                size={Button.Sizes.SMALL}
-                color={Button.Colors.PRIMARY}
-                onClick={() => {
-                  if (p.days === -1) {
-                    settings.store.filterStartDate = "";
-                    settings.store.filterEndDate = "";
-                  } else {
-                    const end = new Date();
-                    const start = new Date();
-                    start.setDate(end.getDate() - p.days);
-                    settings.store.filterStartDate = start.toISOString().split("T")[0];
-                    settings.store.filterEndDate = end.toISOString().split("T")[0];
-                  }
-                }}
-              >
-                {p.label}
-              </Button>
-            ))}
-          </div>
+					<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+						<div>
+							<Forms.FormTitle tag="h5">Start Date</Forms.FormTitle>
+							<TextInput type="date" value={filterStartDate} onChange={(v) => (settings.store.filterStartDate = v)} />
+						</div>
+						<div>
+							<Forms.FormTitle tag="h5">End Date</Forms.FormTitle>
+							<TextInput type="date" value={filterEndDate} onChange={(v) => (settings.store.filterEndDate = v)} />
+						</div>
+					</div>
+				</div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <Forms.FormTitle tag="h5">Start Date</Forms.FormTitle>
-              <TextInput
-                type="date"
-                value={filterStartDate}
-                onChange={v => settings.store.filterStartDate = v}
-              />
-            </div>
-            <div>
-              <Forms.FormTitle tag="h5">End Date</Forms.FormTitle>
-              <TextInput
-                type="date"
-                value={filterEndDate}
-                onChange={v => settings.store.filterEndDate = v}
-              />
-            </div>
-          </div>
-        </div>
+				<div>
+					<Forms.FormTitle tag="h5">Only from User (ID)</Forms.FormTitle>
+					<TextInput
+						placeholder="Discord User ID"
+						value={filterUserId}
+						onChange={(v) => (settings.store.filterUserId = v)}
+					/>
+				</div>
 
-        <div>
-          <Forms.FormTitle tag="h5">Only from User (ID)</Forms.FormTitle>
-          <TextInput
-            placeholder="Discord User ID"
-            value={filterUserId}
-            onChange={v => settings.store.filterUserId = v}
-          />
-        </div>
-
-        <Divider />
-
-      </div>
-    );
-  }
+				<Divider />
+			</div>
+		);
+	},
 });
